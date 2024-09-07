@@ -1,8 +1,11 @@
 import axios from 'axios';
+import sharp from 'sharp';
 import redis from '../../src/helpers/redis';
 import { KEY_PREFIX } from '../../src/addressResolvers/cache';
 
 const HOST = `http://localhost:${process.env.PORT || 3003}`;
+const TEST_AVATAR_ID = '0x89ceF96c58A85d9bE6DFa46D667e71f45f9Ad046';
+const TEST_RESIZE_SIZE = 32;
 
 async function purge(): Promise<void> {
   if (!redis) return;
@@ -16,6 +19,33 @@ async function purge(): Promise<void> {
 
 describe('E2E api', () => {
   describe('GET type/TYPE/ID', () => {
+    it('returns a 400 status on invalid type', async () => {
+      const makeInvalidRequest = async () => await axios.get(`${HOST}/invalid/0x123`);
+
+      expect(makeInvalidRequest()).rejects.toThrowError(/status code 400/);
+    });
+
+    it('returns a 400 status on invalid resolver', async () => {
+      const makeInvalidRequest = async () =>
+        await axios.get(`${HOST}/avatar/0x123=?resolver=invalid`);
+
+      expect(makeInvalidRequest()).rejects.toThrowError(/status code 400/);
+    });
+
+    it('returns an image of custom size and expected format', async () => {
+      const response = await axios.get(`${HOST}/avatar/${TEST_AVATAR_ID}?s=${TEST_RESIZE_SIZE}`, {
+        responseType: 'arraybuffer'
+      });
+      const metadata = await sharp(response.data).metadata();
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toMatch(/^image\//);
+      expect(response.data.length).toBeGreaterThan(0);
+      expect(metadata.width).toBe(TEST_RESIZE_SIZE);
+      expect(metadata.height).toBe(TEST_RESIZE_SIZE);
+      expect(metadata.format).toBe('webp');
+    });
+
     it.todo('returns a 500 status on invalid query');
 
     describe('when the image is not cached', () => {
